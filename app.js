@@ -9,12 +9,13 @@
   const letters = "abcdefghijklmnopqrstuvwxyz".split("");
   const punctuation = [".", ",", "?", "!"];
   const settingsKey = "offline-speller-settings-v1";
+  const autoReadMigrationKey = "offline-speller-auto-read-default-v2";
   const defaults = {
     accent: "en-GB",
     rate: 0.8,
     volume: 1,
     readLetters: true,
-    autoReadWords: true,
+    autoReadWords: false,
     delay: 1.5
   };
 
@@ -26,7 +27,6 @@
   let autoReadTimer = null;
   let lastAutoSpoken = null;
   let voices = [];
-  let pendingLetters = [];
   let currentSpeech = null;
   let speechToken = 0;
 
@@ -61,6 +61,11 @@
     try {
       const saved = JSON.parse(localStorage.getItem(settingsKey) || "null");
       if (saved && typeof saved === "object") settings = { ...defaults, ...saved };
+      if (localStorage.getItem(autoReadMigrationKey) !== "done") {
+        settings.autoReadWords = false;
+        localStorage.setItem(settingsKey, JSON.stringify(settings));
+        localStorage.setItem(autoReadMigrationKey, "done");
+      }
     } catch {
       settings = { ...defaults };
     }
@@ -132,7 +137,6 @@
 
   function cancelSpeech() {
     speechToken += 1;
-    pendingLetters = [];
     currentSpeech = null;
     if ("speechSynthesis" in window) window.speechSynthesis.cancel();
   }
@@ -157,30 +161,21 @@
   function finishSpeech(token) {
     if (token !== speechToken) return;
     currentSpeech = null;
-    playNextLetter();
-  }
-
-  function playNextLetter() {
-    if (currentSpeech || pendingLetters.length === 0) return;
-    const request = pendingLetters.shift();
-    const token = speechToken;
-    const utterance = makeUtterance(request, token);
-    if (!utterance) return;
-    currentSpeech = { kind: "letter", text: request.text };
-    window.speechSynthesis.speak(utterance);
   }
 
   function speakLetter(letter) {
+    cancelSpeech();
     if (!settings.readLetters) return;
     if (!("speechSynthesis" in window) || !chosenVoice()) {
       setFeedback("本機英文語音未就緒；字母仍已輸入", true);
       return;
     }
-    if (currentSpeech?.kind === "word") cancelSpeech();
-    // 最多保留正在讀的字母及四個待讀字母，避免快速連按造成長佇列。
-    if (pendingLetters.length >= 4) pendingLetters.shift();
-    pendingLetters.push({ text: letter.toUpperCase() });
-    playNextLetter();
+    const value = letter.toUpperCase();
+    const token = speechToken;
+    const utterance = makeUtterance({ text: value }, token);
+    if (!utterance) return;
+    currentSpeech = { kind: "letter", text: value };
+    window.speechSynthesis.speak(utterance);
   }
 
   function speakText(value) {
@@ -260,6 +255,10 @@
     renderText();
 
     if (!completedWord) {
+      setFeedback("可以繼續輸入");
+      return;
+    }
+    if (!settings.autoReadWords) {
       setFeedback("可以繼續輸入");
       return;
     }
