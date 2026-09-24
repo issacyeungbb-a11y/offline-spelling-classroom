@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#071b12">
+  <meta name="description" content="離線英文拼字及朗讀輔助程式">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="英文拼字">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="apple-touch-icon" href="./apple-touch-icon.png">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%233fe85f'/%3E%3Ctext x='32' y='43' text-anchor='middle' font-family='Arial,sans-serif' font-size='34' font-weight='700' fill='%23073e20'%3EAa%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="./styles.css">
+  <title>離線英文拼字</title>
+  <script src="./app.js" defer></script>
+</head>
+<body>
+  <main class="app-shell">
+    <header class="topbar">
+      <div class="brand"><span class="brand-mark" aria-hidden="true">Aa</span><span>英文拼字</span></div>
+      <div class="topbar-right">
+        <span id="offlineState" class="offline-state" role="status">正在準備離線資料…</span>
+        <button id="settingsButton" class="icon-button settings-button" type="button" aria-label="開啟設定" title="設定">⚙</button>
+      </div>
+    </header>
+
+    <section class="display-panel" aria-label="文字顯示區">
+      <div id="displayText" class="display-text" dir="ltr" aria-live="polite">開始輸入英文…</div>
+      <button id="clearButton" class="clear-button" type="button" aria-label="清空全部文字" title="清空">×</button>
+      <div id="feedback" class="feedback" role="status" aria-live="polite">可以開始輸入</div>
+    </section>
+
+    <section id="keyboard" class="keyboard" aria-label="英文鍵盤"></section>
+
+    <nav class="actions" aria-label="文字操作">
+      <button class="action action-space" type="button" data-action="space"><span class="action-icon" aria-hidden="true">␣</span><span>空格</span></button>
+      <button class="action action-delete" type="button" data-action="delete"><span class="action-icon" aria-hidden="true">⌫</span><span>刪除</span></button>
+      <button class="action action-clear" type="button" data-action="clear"><span class="action-icon" aria-hidden="true">♲</span><span>清空</span></button>
+      <button class="action action-speak" type="button" data-action="speak"><span class="action-icon" aria-hidden="true">🔊</span><span>朗讀</span></button>
+    </nav>
+
+    <div id="settingsBackdrop" class="settings-backdrop" hidden>
+      <section class="settings-panel" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+        <div class="settings-heading">
+          <h1 id="settingsTitle">語音設定</h1>
+          <button id="closeSettings" class="icon-button close-settings" type="button" aria-label="關閉設定">×</button>
+        </div>
+        <label class="setting-label" for="accentSelect">英文發音</label>
+        <select id="accentSelect" class="setting-control">
+          <option value="en-GB">英式英文</option>
+          <option value="en-US">美式英文</option>
+        </select>
+        <p id="voiceStatus" class="voice-status">正在檢查本機英文語音…</p>
+        <label class="setting-label" for="rateRange">朗讀速度 <output id="rateOutput">正常</output></label>
+        <input id="rateRange" class="range-control" type="range" min="0.55" max="1.1" step="0.05" value="0.8">
+        <label class="setting-label" for="volumeRange">語音音量 <output id="volumeOutput">100%</output></label>
+        <input id="volumeRange" class="range-control" type="range" min="0.2" max="1" step="0.05" value="1">
+        <label class="toggle-row"><span>按鍵時讀出字母</span><input id="lettersToggle" type="checkbox" checked><span class="toggle-ui" aria-hidden="true"></span></label>
+        <label class="toggle-row"><span>停下後自動讀出單字</span><input id="autoToggle" type="checkbox" checked><span class="toggle-ui" aria-hidden="true"></span></label>
+        <label class="setting-label" for="delayRange">自動朗讀等待 <output id="delayOutput">1.5 秒</output></label>
+        <input id="delayRange" class="range-control" type="range" min="0.8" max="3" step="0.1" value="1.5">
+        <p class="settings-note">如未能離線朗讀，請先在 iPad「設定」下載英文語音，之後關閉網絡再測試。</p>
+      </section>
+    </div>
+  </main>
+</body>
+</html>

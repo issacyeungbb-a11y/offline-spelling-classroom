@@ -1,0 +1,15 @@
+Offline Speller Elementary English Word List
+
+Copyright and related rights waived under CC0 1.0 Universal.
+
+This word list was compiled specifically for the Offline Speller project from
+common elementary English vocabulary and inflection patterns. Individual words
+and spellings are factual linguistic data. To remove doubt about copying,
+modification and redistribution, the compilation is dedicated to the public
+domain under the Creative Commons CC0 1.0 Universal dedication.
+
+License text and explanation:
+https://creativecommons.org/publicdomain/zero/1.0/
+
+No attribution is required. The list may be copied, edited, expanded and
+distributed with the application, including in schools and commercial builds.
