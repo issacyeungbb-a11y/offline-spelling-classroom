@@ -114,26 +114,34 @@
     refreshVoiceStatus();
   }
 
-  function localVoices() {
-    return voices.filter((voice) => voice.localService === true && /^en(-|$)/i.test(voice.lang));
+  function loadVoices() {
+    if (!("speechSynthesis" in window)) return;
+    const list = window.speechSynthesis.getVoices();
+    if (list.length > 0) voices = list;
   }
 
+  // Prefer a voice installed on the device, then any English voice the browser offers.
   function chosenVoice() {
+    loadVoices();
     const target = settings.accent.toLowerCase();
-    const available = localVoices();
-    return available.find((voice) => voice.lang.toLowerCase() === target)
-      || available.find((voice) => voice.lang.toLowerCase().startsWith(target.slice(0, 2)))
+    const english = voices.filter((voice) => /^en(-|$)/i.test(voice.lang));
+    const rank = (list) => list.find((voice) => voice.lang.toLowerCase().replace("_", "-") === target)
+      || list.find((voice) => voice.lang.toLowerCase().startsWith(target.slice(0, 2)))
       || null;
+    return rank(english.filter((voice) => voice.localService === true)) || rank(english);
   }
 
   function refreshVoiceStatus() {
     const status = byId("voiceStatus");
     const voice = chosenVoice();
-    if (voice) {
+    if (voice && voice.localService === true) {
       status.textContent = `Available offline: ${voice.name} (${voice.lang})`;
       status.classList.remove("warning");
+    } else if (voice) {
+      status.textContent = `Using ${voice.name} (${voice.lang}). It may need internet; download an English voice in device settings for offline use.`;
+      status.classList.add("warning");
     } else {
-      status.textContent = `${settings.accent === "en-GB" ? "English (UK)" : "English (US)"} voice not found. Download an English voice in iPad Settings, then test again offline.`;
+      status.textContent = "Using this device's default English voice. Download an English voice in device settings for offline use.";
       status.classList.add("warning");
     }
   }
@@ -171,7 +179,7 @@
   }
 
   function replaceSpeech(request, kind) {
-    if (!("speechSynthesis" in window) || !chosenVoice()) return false;
+    if (!("speechSynthesis" in window)) return false;
     const token = speechToken + 1;
     const utterance = makeUtterance(request, token);
     if (!utterance) return false;
@@ -215,19 +223,24 @@
   }
 
   function makeUtterance(request, token) {
-    const voice = chosenVoice();
-    if (!voice || !("speechSynthesis" in window)) {
-      setFeedback("No offline English voice is available. Check Voice Settings.", true);
+    if (!("speechSynthesis" in window)) {
+      setFeedback("This browser cannot read text aloud.", true);
       return null;
     }
+    const voice = chosenVoice();
     const utterance = new SpeechSynthesisUtterance(request.text);
-    utterance.voice = voice;
-    utterance.lang = voice.lang;
+    if (voice) utterance.voice = voice;
+    utterance.lang = voice ? voice.lang : settings.accent;
     utterance.rate = settings.rate;
     utterance.volume = settings.volume;
     utterance.pitch = 1;
     utterance.onend = () => finishSpeech(token);
-    utterance.onerror = () => finishSpeech(token);
+    utterance.onerror = (event) => {
+      if (event.error && !["canceled", "interrupted"].includes(event.error)) {
+        setFeedback(`Could not read aloud (${event.error}). Check device volume and voice settings.`, true);
+      }
+      finishSpeech(token);
+    };
     return utterance;
   }
 
@@ -253,17 +266,16 @@
       cancelSpeech();
       return;
     }
-    if (!("speechSynthesis" in window) || !chosenVoice()) {
-      cancelSpeech();
-      setFeedback("Offline English voice is not ready; the letter was added.", true);
+    if (!("speechSynthesis" in window)) {
+      setFeedback("This browser cannot read text aloud; the letter was added.", true);
       return;
     }
     replaceSpeech({ text: letter.toUpperCase() }, "letter");
   }
 
   function speakText(value) {
-    if (!("speechSynthesis" in window) || !chosenVoice()) {
-      setFeedback("Offline English voice is not ready. Download an English voice first.", true);
+    if (!("speechSynthesis" in window)) {
+      setFeedback("This browser cannot read text aloud.", true);
       return false;
     }
     return replaceSpeech({ text: value }, "word");
@@ -520,9 +532,9 @@
     renderText();
 
     if ("speechSynthesis" in window) {
-      voices = window.speechSynthesis.getVoices();
+      loadVoices();
       window.speechSynthesis.addEventListener("voiceschanged", () => {
-        voices = window.speechSynthesis.getVoices();
+        loadVoices();
         refreshVoiceStatus();
       });
     }
