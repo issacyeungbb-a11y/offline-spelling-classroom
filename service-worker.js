@@ -45,7 +45,7 @@ self.addEventListener("fetch", (event) => {
         return fresh;
       } catch {
         return (await caches.match(new URL("./index.html", self.registration.scope).href))
-          || new Response("離線程式尚未完成安裝，請先連線開啟一次。", { status: 503, headers: { "Content-Type": "text/plain; charset=utf-8" } });
+          || new Response("The offline app has not finished installing. Open it once while online.", { status: 503, headers: { "Content-Type": "text/plain; charset=utf-8" } });
       }
     })());
     return;

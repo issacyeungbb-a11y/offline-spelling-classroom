@@ -41,7 +41,7 @@
 
   function renderText() {
     if (text.length === 0) {
-      display.textContent = "開始輸入英文…";
+      display.textContent = "Start typing in English…";
       display.classList.add("empty");
     } else {
       display.textContent = text;
@@ -92,7 +92,7 @@
     try {
       localStorage.setItem(settingsKey, JSON.stringify(settings));
     } catch {
-      setFeedback("裝置未能保存設定，其他功能仍可使用", true);
+      setFeedback("Could not save settings on this device. Other features are still available.", true);
     }
     syncSettingsControls();
   }
@@ -104,9 +104,9 @@
     byId("lettersToggle").checked = settings.readLetters;
     byId("autoToggle").checked = settings.autoReadWords;
     byId("delayRange").value = String(settings.delay);
-    byId("rateOutput").textContent = settings.rate < 0.75 ? "較慢" : settings.rate > 0.95 ? "較快" : "正常";
+    byId("rateOutput").textContent = settings.rate < 0.75 ? "Slower" : settings.rate > 0.95 ? "Faster" : "Normal";
     byId("volumeOutput").textContent = `${Math.round(settings.volume * 100)}%`;
-    byId("delayOutput").textContent = `${settings.delay.toFixed(1)} 秒`;
+    byId("delayOutput").textContent = `${settings.delay.toFixed(1)} sec`;
     byId("delayRange").disabled = !settings.autoReadWords;
     refreshVoiceStatus();
   }
@@ -127,10 +127,10 @@
     const status = byId("voiceStatus");
     const voice = chosenVoice();
     if (voice) {
-      status.textContent = `可離線使用：${voice.name}（${voice.lang}）`;
+      status.textContent = `Available offline: ${voice.name} (${voice.lang})`;
       status.classList.remove("warning");
     } else {
-      status.textContent = `${settings.accent === "en-GB" ? "英式" : "美式"}本機語音未找到。請在 iPad 設定下載英文語音，並保持網絡關閉測試。`;
+      status.textContent = `${settings.accent === "en-GB" ? "English (UK)" : "English (US)"} voice not found. Download an English voice in iPad Settings, then test again offline.`;
       status.classList.add("warning");
     }
   }
@@ -144,7 +144,7 @@
   function makeUtterance(request, token) {
     const voice = chosenVoice();
     if (!voice || !("speechSynthesis" in window)) {
-      setFeedback("未找到可離線使用的英文語音，請檢查語音設定", true);
+      setFeedback("No offline English voice is available. Check Voice Settings.", true);
       return null;
     }
     const utterance = new SpeechSynthesisUtterance(request.text);
@@ -167,7 +167,7 @@
     cancelSpeech();
     if (!settings.readLetters) return;
     if (!("speechSynthesis" in window) || !chosenVoice()) {
-      setFeedback("本機英文語音未就緒；字母仍已輸入", true);
+      setFeedback("Offline English voice is not ready; the letter was added.", true);
       return;
     }
     const value = letter.toUpperCase();
@@ -180,7 +180,7 @@
 
   function speakText(value) {
     if (!("speechSynthesis" in window) || !chosenVoice()) {
-      setFeedback("本機英文語音未就緒；請先下載英文語音", true);
+      setFeedback("Offline English voice is not ready. Download an English voice first.", true);
       return false;
     }
     cancelSpeech();
@@ -202,13 +202,13 @@
   function confirmWord(word, spokenRevision) {
     if (!word || !dictionaryReady) return false;
     if (!dictionary.has(normalizeWord(word))) {
-      setFeedback(`未能確認單字：${word}`, true);
+      setFeedback(`Word not found in the local word list: ${word}`, true);
       return false;
     }
     if (lastAutoSpoken?.word === word && lastAutoSpoken.revision === spokenRevision) return true;
     if (speakText(word)) {
       lastAutoSpoken = { word, revision: spokenRevision };
-      setFeedback(`已朗讀：${word}`);
+      setFeedback(`Spoken: ${word}`);
     }
     return true;
   }
@@ -231,7 +231,7 @@
     text += letter.toLowerCase();
     revision += 1;
     renderText();
-    setFeedback("正在輸入");
+    setFeedback("Typing…");
     speakLetter(letter);
     scheduleAutoRead();
   }
@@ -242,7 +242,7 @@
     text += "'";
     revision += 1;
     renderText();
-    setFeedback("正在輸入");
+    setFeedback("Typing…");
     scheduleAutoRead();
   }
 
@@ -255,15 +255,15 @@
     renderText();
 
     if (!completedWord) {
-      setFeedback("可以繼續輸入");
+      setFeedback("You can keep typing");
       return;
     }
     if (!settings.autoReadWords) {
-      setFeedback("可以繼續輸入");
+      setFeedback("You can keep typing");
       return;
     }
     if (lastAutoSpoken?.word === completedWord && lastAutoSpoken.revision === completedRevision) {
-      setFeedback(`已朗讀：${completedWord}`);
+      setFeedback(`Spoken: ${completedWord}`);
       return;
     }
     confirmWord(completedWord, completedRevision);
@@ -277,7 +277,7 @@
     revision += 1;
     lastAutoSpoken = null;
     renderText();
-    setFeedback(text ? "已刪除，可以繼續修改" : "可以開始輸入");
+    setFeedback(text ? "Deleted. You can keep editing." : "Ready to type");
     scheduleAutoRead();
   }
 
@@ -288,28 +288,28 @@
     revision += 1;
     lastAutoSpoken = null;
     renderText();
-    setFeedback("已清空");
+    setFeedback("All text cleared");
   }
 
   function manualRead() {
     cancelAutoRead();
     const value = text.trim();
     if (!value) {
-      setFeedback("請先輸入英文");
+      setFeedback("Type some English first");
       return;
     }
     if (speakText(value)) {
       const word = latestWord();
       if (word) lastAutoSpoken = { word, revision };
-      setFeedback("正在朗讀");
+      setFeedback("Reading aloud");
     }
   }
 
   function buildKeyboard() {
     const keys = [
-      ...letters.map((value) => ({ value, label: `英文字母 ${value.toUpperCase()}`, kind: "letter" })),
-      { value: "'", label: "撇號", kind: "punctuation" },
-      ...punctuation.map((value) => ({ value, label: ({ ".": "句號", ",": "逗號", "?": "問號", "!": "感嘆號" })[value], kind: "punctuation" }))
+      ...letters.map((value) => ({ value, label: `English letter ${value.toUpperCase()}`, kind: "letter" })),
+      { value: "'", label: "Apostrophe", kind: "punctuation" },
+      ...punctuation.map((value) => ({ value, label: ({ ".": "Period", ",": "Comma", "?": "Question mark", "!": "Exclamation mark" })[value], kind: "punctuation" }))
     ];
     const fragment = document.createDocumentFragment();
     for (const key of keys) {
@@ -389,12 +389,12 @@
 
   async function prepareOfflineApp() {
     if (!("serviceWorker" in navigator)) {
-      offlineState.textContent = "此瀏覽器不支援離線安裝";
+      offlineState.textContent = "This browser does not support offline installation";
       offlineState.classList.add("warning");
       return false;
     }
     if (navigator.serviceWorker.controller) {
-      // 已由離線工作程序控制時，不要令每次離線開啟都等待一次更新檢查。
+      // Once controlled by the service worker, avoid waiting on an update check at every offline launch.
       navigator.serviceWorker.register("./service-worker.js", { scope: "./" }).catch(() => {});
       return true;
     }
@@ -416,7 +416,7 @@
       await navigator.serviceWorker.ready;
       return Boolean(registration.active);
     } catch {
-      offlineState.textContent = "離線資料未能保存，請保持網絡重試";
+      offlineState.textContent = "Offline files could not be saved. Reconnect and try again.";
       offlineState.classList.add("warning");
       return false;
     }
@@ -454,15 +454,15 @@
     const offlineReady = await prepareOfflineApp();
     const wordsReady = await loadDictionary();
     if (offlineReady && wordsReady) {
-      offlineState.textContent = "離線資料已準備";
+      offlineState.textContent = "Offline files are ready";
       offlineState.classList.remove("warning");
       offlineState.classList.add("ready");
-      setFeedback("可以開始輸入");
+      setFeedback("Ready to type");
     } else if (wordsReady) {
-      offlineState.textContent = "目前可用；離線快取未確認";
+      offlineState.textContent = "App is available; offline cache is not confirmed";
       offlineState.classList.add("warning");
     } else {
-      offlineState.textContent = "詞庫未能載入，請連線重試";
+      offlineState.textContent = "Word list could not be loaded. Reconnect and try again.";
       offlineState.classList.add("warning");
     }
   }

@@ -1,8 +1,8 @@
 {
   "id": "./",
-  "name": "離線英文拼字及朗讀",
-  "short_name": "英文拼字",
-  "lang": "zh-Hant",
+  "name": "Offline Spelling and Reading",
+  "short_name": "Spell & Speak",
+  "lang": "en",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
