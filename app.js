@@ -384,7 +384,7 @@
 
   function buildKeyboard() {
     const keys = [
-      ...letters.map((value) => ({ value, label: `English letter ${value.toUpperCase()}`, kind: "letter" })),
+      ...letters.map((value) => ({ value, label: value.toUpperCase(), kind: "letter" })),
       { value: "'", label: "Apostrophe", kind: "punctuation" },
       ...punctuation.map((value) => ({ value, label: ({ ".": "Period", ",": "Comma", "?": "Question mark", "!": "Exclamation mark" })[value], kind: "punctuation" }))
     ];

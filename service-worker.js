@@ -1,5 +1,5 @@
 /* Offline Speller PWA: all application resources are same-origin and pre-cached. */
-const CACHE_NAME = "offline-speller-pwa-v4";
+const CACHE_NAME = "offline-speller-pwa-v5";
 const APP_FILES = [
   "./",
   "./index.html",
