@@ -30,6 +30,8 @@
   let currentSpeech = null;
   let speechToken = 0;
   let speechStartTimer = null;
+  let speechCancelFallbackTimer = null;
+  let pendingSpeech = null;
 
   function normalizeWord(word) {
     return word.trim().toLocaleLowerCase("en").replace(/[’]/g, "'");
@@ -142,22 +144,73 @@
       window.clearTimeout(speechStartTimer);
       speechStartTimer = null;
     }
+    if (speechCancelFallbackTimer !== null) {
+      window.clearTimeout(speechCancelFallbackTimer);
+      speechCancelFallbackTimer = null;
+    }
+    pendingSpeech = null;
     currentSpeech = null;
     if ("speechSynthesis" in window) window.speechSynthesis.cancel();
     return speechToken;
   }
 
-  function startSpeechAfterCancel(request, kind, token) {
+  function startPendingSpeech(token) {
+    const pending = pendingSpeech;
+    if (!pending || pending.token !== token || token !== speechToken) return;
+    if (speechStartTimer !== null) {
+      window.clearTimeout(speechStartTimer);
+      speechStartTimer = null;
+    }
+    if (speechCancelFallbackTimer !== null) {
+      window.clearTimeout(speechCancelFallbackTimer);
+      speechCancelFallbackTimer = null;
+    }
+    pendingSpeech = null;
+    currentSpeech = { kind: pending.kind, text: pending.text, token: pending.token };
+    window.speechSynthesis.speak(pending.utterance);
+  }
+
+  function replaceSpeech(request, kind) {
+    if (!("speechSynthesis" in window) || !chosenVoice()) return false;
+    const token = speechToken + 1;
     const utterance = makeUtterance(request, token);
     if (!utterance) return false;
-    // Let iPad Safari finish cancelling the previous utterance before starting this one.
-    speechStartTimer = window.setTimeout(() => {
+
+    if (speechStartTimer !== null) {
+      window.clearTimeout(speechStartTimer);
       speechStartTimer = null;
-      if (token !== speechToken || !("speechSynthesis" in window)) return;
-      window.speechSynthesis.cancel();
-      currentSpeech = { kind, text: request.text };
-      window.speechSynthesis.speak(utterance);
-    }, 0);
+    }
+    if (speechCancelFallbackTimer !== null) {
+      window.clearTimeout(speechCancelFallbackTimer);
+      speechCancelFallbackTimer = null;
+    }
+
+    const previousToken = currentSpeech?.token ?? null;
+    speechToken = token;
+    pendingSpeech = {
+      kind,
+      text: request.text,
+      utterance,
+      token,
+      waitingForToken: previousToken
+    };
+
+    if (previousToken !== null) {
+      // Wait for Safari's cancellation callback. The timer covers versions that omit it.
+      speechCancelFallbackTimer = window.setTimeout(() => {
+        speechCancelFallbackTimer = null;
+        startPendingSpeech(token);
+      }, 250);
+    }
+
+    window.speechSynthesis.cancel();
+
+    if (previousToken === null && pendingSpeech?.token === token) {
+      speechStartTimer = window.setTimeout(() => {
+        speechStartTimer = null;
+        startPendingSpeech(token);
+      }, 0);
+    }
     return true;
   }
 
@@ -179,19 +232,33 @@
   }
 
   function finishSpeech(token) {
-    if (token !== speechToken) return;
-    currentSpeech = null;
+    if (currentSpeech?.token === token) currentSpeech = null;
+
+    if (pendingSpeech?.waitingForToken === token) {
+      pendingSpeech.waitingForToken = null;
+      if (speechCancelFallbackTimer !== null) {
+        window.clearTimeout(speechCancelFallbackTimer);
+        speechCancelFallbackTimer = null;
+      }
+      const pendingToken = pendingSpeech.token;
+      speechStartTimer = window.setTimeout(() => {
+        speechStartTimer = null;
+        startPendingSpeech(pendingToken);
+      }, 0);
+    }
   }
 
   function speakLetter(letter) {
-    const token = cancelSpeech();
-    if (!settings.readLetters) return;
+    if (!settings.readLetters) {
+      cancelSpeech();
+      return;
+    }
     if (!("speechSynthesis" in window) || !chosenVoice()) {
+      cancelSpeech();
       setFeedback("Offline English voice is not ready; the letter was added.", true);
       return;
     }
-    const value = letter.toUpperCase();
-    startSpeechAfterCancel({ text: value }, "letter", token);
+    replaceSpeech({ text: letter.toUpperCase() }, "letter");
   }
 
   function speakText(value) {
@@ -199,8 +266,7 @@
       setFeedback("Offline English voice is not ready. Download an English voice first.", true);
       return false;
     }
-    const token = cancelSpeech();
-    return startSpeechAfterCancel({ text: value }, "word", token);
+    return replaceSpeech({ text: value }, "word");
   }
 
   function cancelAutoRead() {
