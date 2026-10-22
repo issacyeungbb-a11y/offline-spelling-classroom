@@ -1,5 +1,5 @@
 /* Offline Speller PWA: all application resources are same-origin and pre-cached. */
-const CACHE_NAME = "offline-speller-pwa-v7";
+const CACHE_NAME = "offline-speller-pwa-v8";
 const APP_FILES = [
   "./",
   "./index.html",
@@ -16,7 +16,8 @@ const APP_FILES = [
 self.addEventListener("install", (event) => {
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE_NAME);
-    await cache.addAll(APP_FILES.map((path) => new URL(path, self.registration.scope).href));
+    // Bypass the browser HTTP cache so a new release never stores stale files.
+    await cache.addAll(APP_FILES.map((path) => new Request(new URL(path, self.registration.scope).href, { cache: "reload" })));
     await self.skipWaiting();
   })());
 });
@@ -51,9 +52,19 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  // Network first so updates reach installed copies; the cache answers when offline.
   event.respondWith((async () => {
-    const cached = await caches.match(request);
-    if (cached) return cached;
-    return fetch(request);
+    try {
+      const fresh = await fetch(request, { cache: "no-cache" });
+      if (fresh.ok) {
+        const cache = await caches.open(CACHE_NAME);
+        await cache.put(request, fresh.clone());
+      }
+      return fresh;
+    } catch (error) {
+      const cached = await caches.match(request);
+      if (cached) return cached;
+      throw error;
+    }
   })());
 });

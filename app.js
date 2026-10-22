@@ -15,6 +15,7 @@
     j: "jay", k: "kay", l: "ell", m: "em", n: "en", o: "oh", p: "pee", q: "cue", r: "are",
     s: "ess", t: "tee", u: "you", v: "vee", w: "double you", x: "ex", y: "why", z: "zed"
   };
+  const appVersion = "v8";
   const settingsKey = "offline-speller-settings-v1";
   const autoReadMigrationKey = "offline-speller-auto-read-default-v2";
   const defaults = {
@@ -39,6 +40,7 @@
   let speechStartTimer = null;
   let speechCancelFallbackTimer = null;
   let pendingSpeech = null;
+  let speechWatchdogTimer = null;
 
   function normalizeWord(word) {
     return word.trim().toLocaleLowerCase("en").replace(/[’]/g, "'");
@@ -163,6 +165,7 @@
       window.clearTimeout(speechCancelFallbackTimer);
       speechCancelFallbackTimer = null;
     }
+    clearSpeechWatchdog();
     pendingSpeech = null;
     currentSpeech = null;
     if ("speechSynthesis" in window) window.speechSynthesis.cancel();
@@ -181,7 +184,26 @@
       speechCancelFallbackTimer = null;
     }
     pendingSpeech = null;
+    speakNow(pending);
+  }
+
+  function clearSpeechWatchdog() {
+    if (speechWatchdogTimer !== null) {
+      window.clearTimeout(speechWatchdogTimer);
+      speechWatchdogTimer = null;
+    }
+  }
+
+  // Start speaking immediately. If the engine never reports that it started, say so on screen.
+  function speakNow(pending) {
     currentSpeech = { kind: pending.kind, text: pending.text, token: pending.token };
+    clearSpeechWatchdog();
+    speechWatchdogTimer = window.setTimeout(() => {
+      speechWatchdogTimer = null;
+      if (currentSpeech?.token === pending.token) {
+        setFeedback("This device did not start speaking. Check volume and Voice Settings.", true);
+      }
+    }, 1800);
     window.speechSynthesis.speak(pending.utterance);
   }
 
@@ -201,6 +223,14 @@
     }
 
     const previousToken = currentSpeech?.token ?? null;
+    const synth = window.speechSynthesis;
+    if (previousToken === null && !synth.speaking && !synth.pending) {
+      // Safari on iPhone and iPad only speaks when speak() runs inside the tap itself.
+      speechToken = token;
+      pendingSpeech = null;
+      speakNow({ kind, text: request.text, utterance, token });
+      return true;
+    }
     speechToken = token;
     pendingSpeech = {
       kind,
@@ -241,6 +271,9 @@
     utterance.rate = settings.rate;
     utterance.volume = settings.volume;
     utterance.pitch = 1;
+    utterance.onstart = () => {
+      if (currentSpeech?.token === token) clearSpeechWatchdog();
+    };
     utterance.onend = () => finishSpeech(token);
     utterance.onerror = (event) => {
       if (event.error && !["canceled", "interrupted"].includes(event.error)) {
@@ -548,6 +581,8 @@
       });
     }
     refreshVoiceStatus();
+    const note = document.querySelector(".settings-note");
+    if (note) note.textContent += ` App version ${appVersion}.`;
 
     const offlineReady = await prepareOfflineApp();
     const wordsReady = await loadDictionary();
