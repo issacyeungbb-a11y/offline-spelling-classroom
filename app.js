@@ -8,6 +8,13 @@
   const offlineState = byId("offlineState");
   const letters = "abcdefghijklmnopqrstuvwxyz".split("");
   const punctuation = [".", ",", "?", "!"];
+  // Spoken names of the letters. A bare capital such as "A" is read as "Capital A" by some voices,
+  // so the letter name is spelled out the way it sounds.
+  const letterSounds = {
+    a: "ay", b: "bee", c: "cee", d: "dee", e: "ee", f: "eff", g: "gee", h: "aitch", i: "eye",
+    j: "jay", k: "kay", l: "ell", m: "em", n: "en", o: "oh", p: "pee", q: "cue", r: "are",
+    s: "ess", t: "tee", u: "you", v: "vee", w: "double you", x: "ex", y: "why", z: "zed"
+  };
   const settingsKey = "offline-speller-settings-v1";
   const autoReadMigrationKey = "offline-speller-auto-read-default-v2";
   const defaults = {
@@ -270,7 +277,9 @@
       setFeedback("This browser cannot read text aloud; the letter was added.", true);
       return;
     }
-    replaceSpeech({ text: letter.toUpperCase() }, "letter");
+    const name = letter.toLowerCase();
+    const zee = name === "z" && /^en-us/i.test(chosenVoice()?.lang || settings.accent);
+    replaceSpeech({ text: zee ? "zee" : letterSounds[name] || name }, "letter");
   }
 
   function speakText(value) {
