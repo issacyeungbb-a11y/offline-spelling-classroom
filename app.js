@@ -29,6 +29,7 @@
   let voices = [];
   let currentSpeech = null;
   let speechToken = 0;
+  let speechStartTimer = null;
 
   function normalizeWord(word) {
     return word.trim().toLocaleLowerCase("en").replace(/[’]/g, "'");
@@ -137,8 +138,27 @@
 
   function cancelSpeech() {
     speechToken += 1;
+    if (speechStartTimer !== null) {
+      window.clearTimeout(speechStartTimer);
+      speechStartTimer = null;
+    }
     currentSpeech = null;
     if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+    return speechToken;
+  }
+
+  function startSpeechAfterCancel(request, kind, token) {
+    const utterance = makeUtterance(request, token);
+    if (!utterance) return false;
+    // Let iPad Safari finish cancelling the previous utterance before starting this one.
+    speechStartTimer = window.setTimeout(() => {
+      speechStartTimer = null;
+      if (token !== speechToken || !("speechSynthesis" in window)) return;
+      window.speechSynthesis.cancel();
+      currentSpeech = { kind, text: request.text };
+      window.speechSynthesis.speak(utterance);
+    }, 0);
+    return true;
   }
 
   function makeUtterance(request, token) {
@@ -164,18 +184,14 @@
   }
 
   function speakLetter(letter) {
-    cancelSpeech();
+    const token = cancelSpeech();
     if (!settings.readLetters) return;
     if (!("speechSynthesis" in window) || !chosenVoice()) {
       setFeedback("Offline English voice is not ready; the letter was added.", true);
       return;
     }
     const value = letter.toUpperCase();
-    const token = speechToken;
-    const utterance = makeUtterance({ text: value }, token);
-    if (!utterance) return;
-    currentSpeech = { kind: "letter", text: value };
-    window.speechSynthesis.speak(utterance);
+    startSpeechAfterCancel({ text: value }, "letter", token);
   }
 
   function speakText(value) {
@@ -183,13 +199,8 @@
       setFeedback("Offline English voice is not ready. Download an English voice first.", true);
       return false;
     }
-    cancelSpeech();
-    const token = speechToken;
-    const utterance = makeUtterance({ text: value }, token);
-    if (!utterance) return false;
-    currentSpeech = { kind: "word", text: value };
-    window.speechSynthesis.speak(utterance);
-    return true;
+    const token = cancelSpeech();
+    return startSpeechAfterCancel({ text: value }, "word", token);
   }
 
   function cancelAutoRead() {
