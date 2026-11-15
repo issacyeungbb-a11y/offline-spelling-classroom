@@ -13,6 +13,7 @@
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%233fe85f'/%3E%3Ctext x='32' y='43' text-anchor='middle' font-family='Arial,sans-serif' font-size='34' font-weight='700' fill='%23073e20'%3EAa%3C/text%3E%3C/svg%3E">
   <link rel="stylesheet" href="./styles.css">
   <title>Offline Spelling</title>
+  <script src="./learn-words.js" defer></script>
   <script src="./app.js" defer></script>
 </head>
 <body>
@@ -21,12 +22,27 @@
       <div class="brand"><span class="brand-mark" aria-hidden="true">Aa</span><span>Spell & Speak</span></div>
       <div class="topbar-right">
         <span id="offlineState" class="offline-state" role="status">Preparing offline app…</span>
+        <button id="learnButton" class="learn-button" type="button" aria-pressed="false" title="Learn Words"><span class="learn-button-icon" aria-hidden="true">📖</span><span class="learn-button-label">Learn Words</span></button>
         <button id="settingsButton" class="icon-button settings-button" type="button" aria-label="Open settings" title="Settings">⚙</button>
       </div>
     </header>
 
     <section class="display-panel" aria-label="Text display">
       <div id="displayText" class="display-text" dir="ltr">Start typing in English…</div>
+      <div id="learnPanel" class="learn-panel" dir="ltr" hidden>
+        <div id="learnCategories" class="learn-categories" role="tablist" aria-label="Word groups"></div>
+        <div class="learn-target">
+          <button id="learnPrev" class="learn-nav" type="button" aria-label="Previous word">◀</button>
+          <div class="learn-card">
+            <span id="learnPicture" class="learn-picture" aria-hidden="true"></span>
+            <span id="learnWord" class="learn-word"></span>
+            <button id="learnHear" class="learn-hear" type="button" aria-label="Hear the word" title="Hear the word">🔊</button>
+          </div>
+          <button id="learnNext" class="learn-nav" type="button" aria-label="Next word">▶</button>
+        </div>
+        <div id="learnAttempt" class="learn-attempt" aria-live="polite"></div>
+        <div id="learnCount" class="learn-count"></div>
+      </div>
       <button id="clearButton" class="clear-button" type="button" aria-label="Clear all text" title="Clear">×</button>
       <div id="feedback" class="feedback">Ready to type</div>
     </section>
