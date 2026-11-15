@@ -1,10 +1,11 @@
 /* Offline Speller PWA: all application resources are same-origin and pre-cached. */
-const CACHE_NAME = "offline-speller-pwa-v8";
+const CACHE_NAME = "offline-speller-pwa-v9";
 const APP_FILES = [
   "./",
   "./index.html",
   "./styles.css",
   "./app.js",
+  "./learn-words.js",
   "./manifest.webmanifest",
   "./words.txt",
   "./icon.svg",

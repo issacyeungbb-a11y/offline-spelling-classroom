@@ -15,7 +15,9 @@
     j: "jay", k: "kay", l: "ell", m: "em", n: "en", o: "oh", p: "pee", q: "cue", r: "are",
     s: "ess", t: "tee", u: "you", v: "vee", w: "double you", x: "ex", y: "why", z: "zed"
   };
-  const appVersion = "v8";
+  const appVersion = "v9";
+  const learnKey = "offline-speller-learn-v1";
+  const learnGroups = Array.isArray(window.LEARN_WORDS) ? window.LEARN_WORDS.filter((group) => group && Array.isArray(group.words) && group.words.length > 0) : [];
   const settingsKey = "offline-speller-settings-v1";
   const autoReadMigrationKey = "offline-speller-auto-read-default-v2";
   const defaults = {
@@ -41,6 +43,11 @@
   let speechCancelFallbackTimer = null;
   let pendingSpeech = null;
   let speechWatchdogTimer = null;
+  let learning = false;
+  let learnGroupIndex = 0;
+  let learnWordIndex = 0;
+  let attempt = "";
+  let learnDone = false;
 
   function normalizeWord(word) {
     return word.trim().toLocaleLowerCase("en").replace(/[’]/g, "'");
@@ -358,6 +365,10 @@
 
   function enterLetter(letter) {
     if (!/^[a-z]$/i.test(letter)) return;
+    if (learning) {
+      learnType(letter.toLowerCase());
+      return;
+    }
     cancelAutoRead();
     text += letter.toLowerCase();
     revision += 1;
@@ -368,6 +379,10 @@
   }
 
   function enterApostrophe() {
+    if (learning) {
+      learnType("'");
+      return;
+    }
     if (!text || !/[a-z]$/i.test(text)) return;
     cancelAutoRead();
     text += "'";
@@ -378,6 +393,10 @@
   }
 
   function enterSeparator(separator) {
+    if (learning) {
+      learnType(separator);
+      return;
+    }
     cancelAutoRead();
     const completedWord = latestWord();
     const completedRevision = revision;
@@ -401,6 +420,10 @@
   }
 
   function deleteLast() {
+    if (learning) {
+      learnDelete();
+      return;
+    }
     if (!text) return;
     cancelAutoRead();
     cancelSpeech();
@@ -413,6 +436,10 @@
   }
 
   function clearAll() {
+    if (learning) {
+      learnClear();
+      return;
+    }
     cancelAutoRead();
     cancelSpeech();
     text = "";
@@ -423,6 +450,10 @@
   }
 
   function manualRead() {
+    if (learning) {
+      learnHear();
+      return;
+    }
     cancelAutoRead();
     const value = text.trim();
     if (!value) {
@@ -433,6 +464,189 @@
       const word = latestWord();
       if (word) lastAutoSpoken = { word, revision };
       setFeedback("Reading aloud");
+    }
+  }
+
+
+  // ----- Learn Words mode -----
+  function currentLearnWord() {
+    const group = learnGroups[learnGroupIndex];
+    return group ? group.words[learnWordIndex] : null;
+  }
+
+  function loadLearnState() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(learnKey) || "null");
+      if (saved && typeof saved === "object") {
+        const groupIndex = learnGroups.findIndex((group) => group.id === saved.group);
+        if (groupIndex >= 0) {
+          learnGroupIndex = groupIndex;
+          const index = Number(saved.index);
+          learnWordIndex = Number.isInteger(index) && index >= 0 && index < learnGroups[groupIndex].words.length ? index : 0;
+        }
+      }
+    } catch {
+      learnGroupIndex = 0;
+      learnWordIndex = 0;
+    }
+  }
+
+  function saveLearnState() {
+    try {
+      localStorage.setItem(learnKey, JSON.stringify({ group: learnGroups[learnGroupIndex]?.id, index: learnWordIndex }));
+    } catch {
+      // Remembering the position is only a convenience.
+    }
+  }
+
+  function buildLearnCategories() {
+    const container = byId("learnCategories");
+    container.textContent = "";
+    learnGroups.forEach((group, index) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "learn-category";
+      button.dataset.group = String(index);
+      button.setAttribute("role", "tab");
+      const icon = document.createElement("span");
+      icon.setAttribute("aria-hidden", "true");
+      icon.textContent = group.icon || "";
+      const label = document.createElement("span");
+      label.textContent = group.label;
+      button.append(icon, label);
+      container.append(button);
+    });
+  }
+
+  function renderLearn() {
+    const entry = currentLearnWord();
+    const group = learnGroups[learnGroupIndex];
+    for (const button of byId("learnCategories").children) {
+      const selected = Number(button.dataset.group) === learnGroupIndex;
+      button.classList.toggle("selected", selected);
+      button.setAttribute("aria-selected", String(selected));
+    }
+    if (!entry) return;
+
+    const picture = byId("learnPicture");
+    picture.textContent = entry.picture || "";
+    picture.classList.toggle("swatch", Boolean(entry.swatch));
+    picture.style.background = entry.swatch || "";
+    byId("learnWord").textContent = entry.word;
+    byId("learnCount").textContent = `${learnWordIndex + 1} / ${group.words.length}`;
+
+    // One slot per letter of the target; typed letters turn green when right and red when wrong.
+    const box = byId("learnAttempt");
+    box.textContent = "";
+    const target = entry.word;
+    const length = Math.max(target.length, attempt.length);
+    for (let i = 0; i < length; i += 1) {
+      const slot = document.createElement("span");
+      const typed = attempt[i];
+      const expected = target[i];
+      if (expected === " " && typed === undefined) {
+        slot.className = "slot gap";
+      } else if (typed === undefined) {
+        slot.className = "slot empty";
+        slot.textContent = " ";
+      } else {
+        slot.className = `slot ${typed === expected ? "right" : "wrong"}${typed === " " ? " gap" : ""}`;
+        slot.textContent = typed === " " ? " " : typed;
+      }
+      box.append(slot);
+    }
+    box.classList.toggle("done", learnDone);
+    byId("learnPanel").classList.toggle("done", learnDone);
+  }
+
+  function showLearnWord(groupIndex, wordIndex) {
+    cancelSpeech();
+    learnGroupIndex = groupIndex;
+    const count = learnGroups[groupIndex].words.length;
+    learnWordIndex = ((wordIndex % count) + count) % count;
+    attempt = "";
+    learnDone = false;
+    saveLearnState();
+    renderLearn();
+    setFeedback("Look at the word and type it");
+  }
+
+  function learnType(character) {
+    const entry = currentLearnWord();
+    if (!entry) return;
+    if (learnDone) {
+      setFeedback("Well done! Tap ▶ for the next word.");
+      return;
+    }
+    if (character === " " && (!attempt || attempt.endsWith(" "))) return;
+    attempt += character;
+    const target = entry.word;
+    if (attempt === target) {
+      learnDone = true;
+      renderLearn();
+      // Read the whole word instead of the last letter, inside the tap so iPad Safari allows it.
+      speakText(target);
+      setFeedback(`Well done! You typed “${target}”.`);
+      return;
+    }
+    renderLearn();
+    if (/^[a-z]$/.test(character)) speakLetter(character);
+    else cancelSpeech();
+    if (target.startsWith(attempt)) {
+      setFeedback("Good. Keep going…");
+    } else {
+      setFeedback("A red letter is not the same. Tap Delete and try again.", true);
+    }
+  }
+
+  function learnDelete() {
+    if (!attempt) return;
+    cancelSpeech();
+    attempt = Array.from(attempt).slice(0, -1).join("");
+    learnDone = false;
+    renderLearn();
+    const target = currentLearnWord()?.word || "";
+    setFeedback(target.startsWith(attempt) ? "Good. Keep going…" : "A red letter is not the same. Tap Delete and try again.", !target.startsWith(attempt));
+  }
+
+  function learnClear() {
+    cancelSpeech();
+    attempt = "";
+    learnDone = false;
+    renderLearn();
+    setFeedback("Look at the word and type it");
+  }
+
+  function learnHear() {
+    const entry = currentLearnWord();
+    if (entry && speakText(entry.word)) setFeedback(`Listen: ${entry.word}`);
+  }
+
+  function setLearning(on) {
+    if (on && learnGroups.length === 0) {
+      setFeedback("The Learn Words list could not be loaded.", true);
+      return;
+    }
+    learning = on;
+    cancelAutoRead();
+    cancelSpeech();
+    document.querySelector(".app-shell").classList.toggle("learning", on);
+    display.hidden = on;
+    byId("learnPanel").hidden = !on;
+    const button = byId("learnButton");
+    button.setAttribute("aria-pressed", String(on));
+    button.querySelector(".learn-button-icon").textContent = on ? "✍️" : "📖";
+    button.querySelector(".learn-button-label").textContent = on ? "Free Typing" : "Learn Words";
+    button.title = on ? "Back to free typing" : "Learn Words";
+    byId("clearButton").setAttribute("aria-label", on ? "Clear your typing" : "Clear all text");
+    if (on) {
+      attempt = "";
+      learnDone = false;
+      renderLearn();
+      setFeedback("Look at the word and type it");
+    } else {
+      renderText();
+      setFeedback(text ? "You can keep typing" : "Ready to type");
     }
   }
 
@@ -484,6 +698,14 @@
       if (action === "speak") manualRead();
     });
     byId("clearButton").addEventListener("click", clearAll);
+    byId("learnButton").addEventListener("click", () => setLearning(!learning));
+    byId("learnHear").addEventListener("click", learnHear);
+    byId("learnPrev").addEventListener("click", () => showLearnWord(learnGroupIndex, learnWordIndex - 1));
+    byId("learnNext").addEventListener("click", () => showLearnWord(learnGroupIndex, learnWordIndex + 1));
+    byId("learnCategories").addEventListener("click", (event) => {
+      const button = event.target.closest("button[data-group]");
+      if (button) showLearnWord(Number(button.dataset.group), 0);
+    });
     byId("settingsButton").addEventListener("click", showSettings);
     byId("closeSettings").addEventListener("click", hideSettings);
     byId("settingsBackdrop").addEventListener("click", (event) => {
@@ -569,6 +791,8 @@
 
   async function initialize() {
     loadSettings();
+    loadLearnState();
+    buildLearnCategories();
     buildKeyboard();
     bindEvents();
     renderText();
