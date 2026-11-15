@@ -15,7 +15,7 @@
     j: "jay", k: "kay", l: "ell", m: "em", n: "en", o: "oh", p: "pee", q: "cue", r: "are",
     s: "ess", t: "tee", u: "you", v: "vee", w: "double you", x: "ex", y: "why", z: "zed"
   };
-  const appVersion = "v9";
+  const appVersion = "v10";
   const learnKey = "offline-speller-learn-v1";
   const learnGroups = Array.isArray(window.LEARN_WORDS) ? window.LEARN_WORDS.filter((group) => group && Array.isArray(group.words) && group.words.length > 0) : [];
   const settingsKey = "offline-speller-settings-v1";
@@ -48,6 +48,8 @@
   let learnWordIndex = 0;
   let attempt = "";
   let learnDone = false;
+  let listGroupIndex = 0;
+  const finishedWords = new Set();
 
   function normalizeWord(word) {
     return word.trim().toLocaleLowerCase("en").replace(/[’]/g, "'");
@@ -500,7 +502,10 @@
   }
 
   function buildLearnCategories() {
-    const container = byId("learnCategories");
+    for (const id of ["learnCategories", "wordListCategories"]) fillCategories(byId(id));
+  }
+
+  function fillCategories(container) {
     container.textContent = "";
     learnGroups.forEach((group, index) => {
       const button = document.createElement("button");
@@ -583,6 +588,7 @@
     const target = entry.word;
     if (attempt === target) {
       learnDone = true;
+      finishedWords.add(`${learnGroupIndex}:${learnWordIndex}`);
       renderLearn();
       // Read the whole word instead of the last letter, inside the tap so iPad Safari allows it.
       speakText(target);
@@ -622,6 +628,57 @@
     if (entry && speakText(entry.word)) setFeedback(`Listen: ${entry.word}`);
   }
 
+  // ----- Word list: pick any word of a group directly -----
+  function renderWordList() {
+    const group = learnGroups[listGroupIndex];
+    for (const button of byId("wordListCategories").children) {
+      const selected = Number(button.dataset.group) === listGroupIndex;
+      button.classList.toggle("selected", selected);
+      button.setAttribute("aria-selected", String(selected));
+    }
+    byId("wordListTitle").textContent = `${group.label}: choose a word`;
+    const grid = byId("wordListGrid");
+    grid.textContent = "";
+    group.words.forEach((entry, index) => {
+      const tile = document.createElement("button");
+      tile.type = "button";
+      tile.className = "word-tile";
+      tile.dataset.index = String(index);
+      if (listGroupIndex === learnGroupIndex && index === learnWordIndex) tile.classList.add("current");
+      const finished = finishedWords.has(`${listGroupIndex}:${index}`);
+      if (finished) tile.classList.add("finished");
+      const picture = document.createElement("span");
+      picture.className = `word-tile-picture${entry.swatch ? " swatch" : ""}`;
+      picture.setAttribute("aria-hidden", "true");
+      if (entry.swatch) picture.style.background = entry.swatch;
+      else picture.textContent = entry.picture || "";
+      const word = document.createElement("span");
+      word.className = "word-tile-word";
+      word.textContent = entry.word;
+      tile.append(picture, word);
+      tile.setAttribute("aria-label", finished ? `${entry.word}, done` : entry.word);
+      grid.append(tile);
+    });
+    grid.scrollTop = 0;
+  }
+
+  function showWordList(groupIndex) {
+    cancelSpeech();
+    listGroupIndex = groupIndex;
+    renderWordList();
+    byId("wordListBackdrop").hidden = false;
+    byId("closeWordList").focus();
+  }
+
+  function hideWordList() {
+    byId("wordListBackdrop").hidden = true;
+  }
+
+  function chooseListWord(index) {
+    hideWordList();
+    showLearnWord(listGroupIndex, index);
+  }
+
   function setLearning(on) {
     if (on && learnGroups.length === 0) {
       setFeedback("The Learn Words list could not be loaded.", true);
@@ -639,6 +696,7 @@
     button.querySelector(".learn-button-label").textContent = on ? "Free Typing" : "Learn Words";
     button.title = on ? "Back to free typing" : "Learn Words";
     byId("clearButton").setAttribute("aria-label", on ? "Clear your typing" : "Clear all text");
+    if (!on) hideWordList();
     if (on) {
       attempt = "";
       learnDone = false;
@@ -704,7 +762,21 @@
     byId("learnNext").addEventListener("click", () => showLearnWord(learnGroupIndex, learnWordIndex + 1));
     byId("learnCategories").addEventListener("click", (event) => {
       const button = event.target.closest("button[data-group]");
-      if (button) showLearnWord(Number(button.dataset.group), 0);
+      if (button) showWordList(Number(button.dataset.group));
+    });
+    byId("wordListCategories").addEventListener("click", (event) => {
+      const button = event.target.closest("button[data-group]");
+      if (!button) return;
+      listGroupIndex = Number(button.dataset.group);
+      renderWordList();
+    });
+    byId("wordListGrid").addEventListener("click", (event) => {
+      const tile = event.target.closest("button[data-index]");
+      if (tile) chooseListWord(Number(tile.dataset.index));
+    });
+    byId("closeWordList").addEventListener("click", hideWordList);
+    byId("wordListBackdrop").addEventListener("click", (event) => {
+      if (event.target === byId("wordListBackdrop")) hideWordList();
     });
     byId("settingsButton").addEventListener("click", showSettings);
     byId("closeSettings").addEventListener("click", hideSettings);
@@ -718,6 +790,10 @@
     }
 
     document.addEventListener("keydown", (event) => {
+      if (!byId("wordListBackdrop").hidden) {
+        if (event.key === "Escape") hideWordList();
+        return;
+      }
       if (!byId("settingsBackdrop").hidden || event.metaKey || event.ctrlKey || event.altKey) return;
       if (/^[a-z]$/i.test(event.key)) {
         event.preventDefault();
