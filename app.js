@@ -15,7 +15,7 @@
     j: "jay", k: "kay", l: "ell", m: "em", n: "en", o: "oh", p: "pee", q: "cue", r: "are",
     s: "ess", t: "tee", u: "you", v: "vee", w: "double you", x: "ex", y: "why", z: "zed"
   };
-  const appVersion = "v10";
+  const appVersion = "v11";
   const learnKey = "offline-speller-learn-v1";
   const learnGroups = Array.isArray(window.LEARN_WORDS) ? window.LEARN_WORDS.filter((group) => group && Array.isArray(group.words) && group.words.length > 0) : [];
   const settingsKey = "offline-speller-settings-v1";
@@ -46,6 +46,11 @@
   let learning = false;
   let learnGroupIndex = 0;
   let learnWordIndex = 0;
+  // Words are shown in a shuffled order by default. Every word comes up once
+  // before the group is reshuffled, and the same word never appears twice in a row.
+  let learnRandom = true;
+  let learnOrder = [];
+  let learnPosition = 0;
   let attempt = "";
   let learnDone = false;
   let listGroupIndex = 0;
@@ -486,6 +491,7 @@
           const index = Number(saved.index);
           learnWordIndex = Number.isInteger(index) && index >= 0 && index < learnGroups[groupIndex].words.length ? index : 0;
         }
+        if (typeof saved.random === "boolean") learnRandom = saved.random;
       }
     } catch {
       learnGroupIndex = 0;
@@ -495,7 +501,7 @@
 
   function saveLearnState() {
     try {
-      localStorage.setItem(learnKey, JSON.stringify({ group: learnGroups[learnGroupIndex]?.id, index: learnWordIndex }));
+      localStorage.setItem(learnKey, JSON.stringify({ group: learnGroups[learnGroupIndex]?.id, index: learnWordIndex, random: learnRandom }));
     } catch {
       // Remembering the position is only a convenience.
     }
@@ -503,6 +509,73 @@
 
   function buildLearnCategories() {
     for (const id of ["learnCategories", "wordListCategories"]) fillCategories(byId(id));
+    const order = document.createElement("button");
+    order.type = "button";
+    order.id = "learnOrderButton";
+    order.className = "learn-category learn-order";
+    byId("learnCategories").append(order);
+  }
+
+  function shuffled(values) {
+    const list = values.slice();
+    for (let i = list.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [list[i], list[j]] = [list[j], list[i]];
+    }
+    return list;
+  }
+
+  // Build the order for the current group so that it starts with firstIndex.
+  function buildLearnOrder(firstIndex) {
+    const indexes = learnGroups[learnGroupIndex].words.map((_, index) => index);
+    if (learnRandom) {
+      learnOrder = [firstIndex, ...shuffled(indexes.filter((index) => index !== firstIndex))];
+      learnPosition = 0;
+    } else {
+      learnOrder = indexes;
+      learnPosition = firstIndex;
+    }
+  }
+
+  function nextOrderIndex(delta) {
+    let position = learnPosition + delta;
+    if (learnRandom && position >= learnOrder.length) {
+      // A round is finished: add a fresh shuffled round after it, so ◀ can still go back.
+      // The word just shown is kept away from the front of the new round.
+      const count = learnGroups[learnGroupIndex].words.length;
+      const last = learnOrder[learnOrder.length - 1];
+      const others = shuffled([...Array(count).keys()].filter((index) => index !== last));
+      const round = count > 1 ? [others[0], ...shuffled([last, ...others.slice(1)])] : [last];
+      learnOrder = learnOrder.concat(round);
+    }
+    const length = learnOrder.length;
+    learnPosition = ((position % length) + length) % length;
+    return learnOrder[learnPosition];
+  }
+
+  function renderOrderButton() {
+    const button = byId("learnOrderButton");
+    if (!button) return;
+    button.textContent = "";
+    const icon = document.createElement("span");
+    icon.setAttribute("aria-hidden", "true");
+    icon.textContent = learnRandom ? "🔀" : "➡️";
+    const label = document.createElement("span");
+    label.textContent = learnRandom ? "Random" : "In order";
+    button.append(icon, label);
+    button.setAttribute("aria-pressed", String(learnRandom));
+    button.setAttribute("aria-label", learnRandom ? "Random order" : "List order");
+    button.title = learnRandom ? "Words come in a random order. Tap for the list order." : "Words come in the list order. Tap for a random order.";
+    button.classList.toggle("selected", learnRandom);
+  }
+
+  function toggleLearnOrder() {
+    learnRandom = !learnRandom;
+    buildLearnOrder(learnWordIndex);
+    saveLearnState();
+    renderOrderButton();
+    renderLearn();
+    setFeedback(learnRandom ? "Words will now come in a random order" : "Words will now come in the list order");
   }
 
   function fillCategories(container) {
@@ -526,7 +599,7 @@
   function renderLearn() {
     const entry = currentLearnWord();
     const group = learnGroups[learnGroupIndex];
-    for (const button of byId("learnCategories").children) {
+    for (const button of byId("learnCategories").querySelectorAll("[data-group]")) {
       const selected = Number(button.dataset.group) === learnGroupIndex;
       button.classList.toggle("selected", selected);
       button.setAttribute("aria-selected", String(selected));
@@ -538,7 +611,7 @@
     picture.classList.toggle("swatch", Boolean(entry.swatch));
     picture.style.background = entry.swatch || "";
     byId("learnWord").textContent = entry.word;
-    byId("learnCount").textContent = `${learnWordIndex + 1} / ${group.words.length}`;
+    byId("learnCount").textContent = `${(learnPosition % group.words.length) + 1} / ${group.words.length}`;
 
     // One slot per letter of the target; typed letters turn green when right and red when wrong.
     const box = byId("learnAttempt");
@@ -564,11 +637,23 @@
     byId("learnPanel").classList.toggle("done", learnDone);
   }
 
+  // Jump to a chosen word (from the word list); the rest of the round follows the current order.
   function showLearnWord(groupIndex, wordIndex) {
-    cancelSpeech();
     learnGroupIndex = groupIndex;
     const count = learnGroups[groupIndex].words.length;
     learnWordIndex = ((wordIndex % count) + count) % count;
+    buildLearnOrder(learnWordIndex);
+    presentLearnWord();
+  }
+
+  function stepLearnWord(delta) {
+    if (learnOrder[learnPosition] !== learnWordIndex) buildLearnOrder(learnWordIndex);
+    learnWordIndex = nextOrderIndex(delta);
+    presentLearnWord();
+  }
+
+  function presentLearnWord() {
+    cancelSpeech();
     attempt = "";
     learnDone = false;
     saveLearnState();
@@ -698,6 +783,8 @@
     byId("clearButton").setAttribute("aria-label", on ? "Clear your typing" : "Clear all text");
     if (!on) hideWordList();
     if (on) {
+      buildLearnOrder(learnWordIndex);
+      renderOrderButton();
       attempt = "";
       learnDone = false;
       renderLearn();
@@ -758,8 +845,9 @@
     byId("clearButton").addEventListener("click", clearAll);
     byId("learnButton").addEventListener("click", () => setLearning(!learning));
     byId("learnHear").addEventListener("click", learnHear);
-    byId("learnPrev").addEventListener("click", () => showLearnWord(learnGroupIndex, learnWordIndex - 1));
-    byId("learnNext").addEventListener("click", () => showLearnWord(learnGroupIndex, learnWordIndex + 1));
+    byId("learnPrev").addEventListener("click", () => stepLearnWord(-1));
+    byId("learnNext").addEventListener("click", () => stepLearnWord(1));
+    byId("learnOrderButton").addEventListener("click", toggleLearnOrder);
     byId("learnCategories").addEventListener("click", (event) => {
       const button = event.target.closest("button[data-group]");
       if (button) showWordList(Number(button.dataset.group));
